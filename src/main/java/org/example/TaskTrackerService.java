@@ -1,56 +1,78 @@
 package org.example;
 
+import lombok.Data;
+
 import java.time.LocalDateTime;
 import java.util.ArrayList;
-import java.util.Collection;
+import java.util.List;
 import java.util.NoSuchElementException;
-import java.util.Optional;
 
+@Data
 public class TaskTrackerService {
 
+    private TaskRepository taskRepository;
+    private List<Task> tasks;
+    private static int taskCounter = 1;
 
-    private static ArrayList<Task> tasks = new ArrayList<>();
-
-    static {
-        tasks.add(new Task(1, "Create a new project", "todo", LocalDateTime.parse("2023-01-01T00:00:00"), LocalDateTime.parse("2023-01-01T00:00:00")));
-        tasks.add(new Task(2, "Write documentation", "In-Progress", LocalDateTime.parse("2023-01-02T00:00:00"), LocalDateTime.parse("2023-01-02T00:00:00")));
-        tasks.add(new Task(3, "Implement feature X", "ToDo", LocalDateTime.parse("2023-01-03T00:00:00"), LocalDateTime.parse("2023-01-03T00:00:00")));
-        tasks.add(new Task(4, "Fix bug Y", "done", LocalDateTime.parse("2023-01-04T00:00:00"), LocalDateTime.parse("2023-01-04T00:00:00")));
+    public TaskTrackerService(TaskRepository taskRepository) {
+        this.taskRepository = taskRepository;
+        tasks = new ArrayList<>();
     }
 
-
-    public Collection<Task> getTasks(String status) {
+    public List<Task> getTasks(String status) {
+        tasks = taskRepository.fetchAllTasks();
         if (status.equals("all")) return tasks;
 
         return tasks.stream()
                 .filter(task -> task.getStatus().equalsIgnoreCase(status))
                 .toList();
-
     }
 
-    public void deleteTask(String taksId) {
-        try {
-            Task toDelete = getTaskById(taksId);
+    public void deleteTask(String taskId) {
+        tasks = taskRepository.fetchAllTasks();
+        Task toDelete = getTaskById(tasks, taskId);
+        if (toDelete == null) {
+            throw new IllegalArgumentException("Couldn't delete task with given id");
+        } else {
             tasks.remove(toDelete);
-
-        } catch (NoSuchElementException e) {
-            throw new NoSuchElementException("Task with given id not found");
+            taskRepository.saveTasks(tasks);
         }
-
     }
-
 
     public void addTask(String description) {
-        tasks.add(new Task(tasks.size() + 1, description, "todo", LocalDateTime.now(), LocalDateTime.now()));
-
+        tasks = taskRepository.fetchAllTasks();
+        if (tasks == null) {
+            tasks = new ArrayList<>();
+        }
+        tasks.add(new Task(nextId(), description, "todo", LocalDateTime.now(), LocalDateTime.now()));
+        taskRepository.saveTasks(tasks);
     }
 
-
-    private Task getTaskById(String taksId) {
-        Optional<Task> tasktoGet = tasks.stream().filter(task-> task.getId() == Integer.parseInt(taksId)).findFirst();
-        if (tasktoGet.isEmpty()) {
-            throw new NoSuchElementException("Task with given id not found");
+    private Task getTaskById(List<Task> tasks, String taskId) {
+        try {
+            int id = Integer.parseInt(taskId);
+            return tasks.stream().filter(task -> task.getId() == id).findFirst().orElse(null);
+        } catch (NumberFormatException e) {
+            return null;
         }
-        return tasktoGet.get();
+    }
+
+    public int nextId() {
+        return tasks.stream().map(Task::getId).max(Integer::compareTo).orElse(0) + 1;
+    }
+
+    public void mark(String id, String status) {
+        try {
+            int taskId = Integer.parseInt(id);
+            Task task = tasks.stream()
+                    .filter(t -> t.getId() == taskId)
+                    .findFirst()
+                    .orElseThrow(() -> new NoSuchElementException("Task with given id not found"));
+            task.setStatus(status);
+            task.setUpdatedAt(LocalDateTime.now());
+            taskRepository.saveTasks(tasks);
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException("Invalid id");
+        }
     }
 }

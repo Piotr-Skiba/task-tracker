@@ -1,90 +1,57 @@
 package org.example;
 
+import lombok.AllArgsConstructor;
+
 import java.util.*;
+import java.util.function.Consumer;
 import java.util.logging.Logger;
 
+@AllArgsConstructor
 public class UI {
 
     private final Logger logger = Logger.getLogger(getClass().getName());
     private final Scanner scanner;
     private final TaskTrackerService taskTrackerService;
 
-    public UI(Scanner scanner, TaskTrackerService taskTrackerService) {
-        this.scanner = scanner;
-        this.taskTrackerService = taskTrackerService;
-    }
-
-
     public void taskCLI() {
         logger.info("Available commands: add, list, delete, help, exit");
 
-        String[] input;
-        boolean exit = false;
-        while (!exit) {
-            input = scanner.nextLine().split(" ", 20);
+        Map<String, Consumer<String[]>> commandHandlers = new HashMap<>();
+        commandHandlers.put("add", input -> taskTrackerService.addTask(String.join(" ", Arrays.copyOfRange(input, 1, input.length))));
+        commandHandlers.put("list", input -> listTasks(taskTrackerService.getTasks(input.length > 1 ? input[1] : "all")));
+        commandHandlers.put("delete", this::handleDelete);
+        commandHandlers.put("mark-done", input -> handleMark(input, "done"));
+        commandHandlers.put("mark-in-progress", input -> handleMark(input, "in-progress"));
+        commandHandlers.put("exit", input -> System.exit(0));
 
+        while (true) {
+            String[] input = scanner.nextLine().split(" ", 20);
             String command = input[0];
-            String arg1 = input.length > 1 ? input[1] : null;
-            //String arg2 = input.length > 2 ? input[2] : null;
-
-            if (input[0].equals("add")) {
-                arg1 = String.join(" ", Arrays.copyOfRange(input, 1, input.length));
-            }
-
-            if ("exit".equalsIgnoreCase(command)) {
-                exit = true;
-            }
-
-
-            performCommand(command, arg1);
-
+            commandHandlers.getOrDefault(command, cmd -> logger.info("Invalid command")).accept(input);
         }
     }
 
-    private void performCommand(String command, String arg1) {
-        switch (command) {
-            case "add":
-                taskTrackerService.addTask(arg1);
-                break;
-            case "list":
-                if (arg1 == null) {
-                    listTasks(taskTrackerService.getTasks("all"));
-                    break;
-                }
-
-                switch (arg1.toLowerCase()) {
-                    case "done":
-                        listTasks(taskTrackerService.getTasks("done"));
-                        break;
-                    case "todo":
-                        listTasks(taskTrackerService.getTasks("todo"));
-                        break;
-                    case "in-progress":
-                        listTasks(taskTrackerService.getTasks("in-progress"));
-                        break;
-                    default:
-                        logger.info("Invalid status");
-                        break;
-                }
-                break;
-            case "delete":
-                try {
-                    taskTrackerService.deleteTask(arg1);
-                } catch (IllegalArgumentException | NoSuchElementException e) {
-                    logger.info(e.getMessage());
-                }
-                break;
-            default:
-                logger.info("Invalid command");
+    private void handleDelete(String[] input) {
+        try {
+            taskTrackerService.deleteTask(input[1]);
+        } catch (IllegalArgumentException | NoSuchElementException | ArrayIndexOutOfBoundsException e) {
+            logger.info(e.getMessage());
         }
     }
 
+    private void handleMark(String[] input, String status) {
+        try {
+            taskTrackerService.mark(input[1], status);
+        } catch (IllegalArgumentException | NoSuchElementException | ArrayIndexOutOfBoundsException e) {
+            logger.info(e.getMessage());
+        }
+    }
 
     private void listTasks(Collection<Task> tasks) {
-        for (Task task : tasks) {
-            logger.info(task.toString());
+        if (tasks == null || tasks.isEmpty()) {
+            logger.info("No tasks found");
+            return;
         }
+        tasks.forEach(task -> logger.info(task.toString()));
     }
-
-
 }
